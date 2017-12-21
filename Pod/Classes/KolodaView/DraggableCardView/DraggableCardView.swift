@@ -19,7 +19,8 @@ public enum DragSpeed: TimeInterval {
 protocol DraggableCardDelegate: class {
     
     func card(_ card: DraggableCardView, wasDraggedWithFinishPercentage percentage: CGFloat, inDirection direction: SwipeResultDirection)
-    func card(_ card: DraggableCardView, wasSwipedIn direction: SwipeResultDirection)
+    func card(_ card: DraggableCardView, wasSwipedIn direction: KolodaDirectionType)
+    func card(_ card: DraggableCardView, convertManualSwipeDirectionType direction: SwipeResultDirection) -> KolodaDirectionType
     func card(_ card: DraggableCardView, shouldSwipeIn direction: SwipeResultDirection) -> Bool
     func card(cardWasReset card: DraggableCardView)
     func card(cardWasTapped card: DraggableCardView)
@@ -357,7 +358,13 @@ public class DraggableCardView: UIView, UIGestureRecognizerDelegate {
     private func swipeAction(_ direction: SwipeResultDirection) {
         overlayView?.overlayState = direction
         overlayView?.alpha = 1.0
-        delegate?.card(self, wasSwipedIn: direction)
+
+        let swipeDirectionType: KolodaDirectionType = self.delegate?.card(
+            self,
+            convertManualSwipeDirectionType: direction)
+            ?? direction
+
+        delegate?.card(self, wasSwipedIn: swipeDirectionType)
         let translationAnimation = POPBasicAnimation(propertyNamed: kPOPLayerTranslationXY)
         translationAnimation?.duration = cardSwipeActionAnimationDuration
         translationAnimation?.fromValue = NSValue(cgPoint: POPLayerGetTranslationXY(layer))
@@ -413,9 +420,11 @@ public class DraggableCardView: UIView, UIGestureRecognizerDelegate {
         layer.pop_removeAllAnimations()
     }
     
-    func swipe(_ direction: SwipeResultDirection) {
+    func swipe(_ directionType: KolodaDirectionType) {
+
+        let direction = directionType.direction
         if !dragBegin {
-            delegate?.card(self, wasSwipedIn: direction)
+            delegate?.card(self, wasSwipedIn: directionType)
             
             let swipePositionAnimation = POPBasicAnimation(propertyNamed: kPOPLayerTranslationXY)
             swipePositionAnimation?.fromValue = NSValue(cgPoint:POPLayerGetTranslationXY(layer))

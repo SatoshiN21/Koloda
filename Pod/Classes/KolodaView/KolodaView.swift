@@ -35,14 +35,21 @@ public extension KolodaViewDataSource {
     func koloda(_ koloda: KolodaView, viewForCardOverlayAt index: Int) -> OverlayView? {
         return nil
     }
-    
+}
+
+extension SwipeResultDirection: KolodaDirectionType {
+
+    public var direction: SwipeResultDirection {
+        return self
+    }
 }
 
 public protocol KolodaViewDelegate: class {
     
     func koloda(_ koloda: KolodaView, allowedDirectionsForIndex index: Int) -> [SwipeResultDirection]
     func koloda(_ koloda: KolodaView, shouldSwipeCardAt index: Int, in direction: SwipeResultDirection) -> Bool
-    func koloda(_ koloda: KolodaView, didSwipeCardAt index: Int, in direction: SwipeResultDirection)
+    func koloda(_ koloda: KolodaView, convertManualSwipeDirectionTypeCardAt index: Int, in direction: SwipeResultDirection) -> KolodaDirectionType
+    func koloda(_ koloda: KolodaView, didSwipeCardAt index: Int, in direction: KolodaDirectionType)
     func kolodaDidRunOutOfCards(_ koloda: KolodaView)
     func koloda(_ koloda: KolodaView, didSelectCardAt index: Int)
     func kolodaShouldApplyAppearAnimation(_ koloda: KolodaView) -> Bool
@@ -53,14 +60,15 @@ public protocol KolodaViewDelegate: class {
     func kolodaSwipeThresholdRatioMargin(_ koloda: KolodaView) -> CGFloat?
     func koloda(_ koloda: KolodaView, didShowCardAt index: Int)
     func koloda(_ koloda: KolodaView, shouldDragCardAt index: Int ) -> Bool
-    
+
 }
 
 public extension KolodaViewDelegate {
     
     func koloda(_ koloda: KolodaView, shouldSwipeCardAt index: Int, in direction: SwipeResultDirection) -> Bool { return true }
     func koloda(_ koloda: KolodaView, allowedDirectionsForIndex index: Int) -> [SwipeResultDirection] { return [.left, .right] }
-    func koloda(_ koloda: KolodaView, didSwipeCardAt index: Int, in direction: SwipeResultDirection) {}
+    func koloda(_ koloda: KolodaView, convertManualSwipeDirectionTypeCardAt index: Int, in direction: SwipeResultDirection) -> KolodaDirectionType { return direction }
+    func koloda(_ koloda: KolodaView, didSwipeCardAt index: Int, in direction: KolodaDirectionType) {}
     func kolodaDidRunOutOfCards(_ koloda: KolodaView) {}
     func koloda(_ koloda: KolodaView, didSelectCardAt index: Int) {}
     func kolodaShouldApplyAppearAnimation(_ koloda: KolodaView) -> Bool { return true }
@@ -71,10 +79,10 @@ public extension KolodaViewDelegate {
     func kolodaSwipeThresholdRatioMargin(_ koloda: KolodaView) -> CGFloat? { return nil}
     func koloda(_ koloda: KolodaView, didShowCardAt index: Int) {}
     func koloda(_ koloda: KolodaView, shouldDragCardAt index: Int ) -> Bool { return true }
-    
 }
 
 open class KolodaView: UIView, DraggableCardDelegate {
+
 
     //Opacity values
     public var alphaValueOpaque = defaultAlphaValueOpaque
@@ -291,9 +299,18 @@ open class KolodaView: UIView, DraggableCardDelegate {
         let index = currentCardIndex + visibleCards.index(of: card)!
         return delegate?.koloda(self, allowedDirectionsForIndex: index) ?? [.left, .right]
     }
-    
-    func card(_ card: DraggableCardView, wasSwipedIn direction: SwipeResultDirection) {
+
+    func card(_ card: DraggableCardView, wasSwipedIn direction: KolodaDirectionType) {
+
         swipedAction(direction)
+    }
+
+    func card(_ card: DraggableCardView, convertManualSwipeDirectionType direction: SwipeResultDirection) -> KolodaDirectionType {
+
+        return self.delegate?.koloda(
+            self,
+            convertManualSwipeDirectionTypeCardAt: self.currentCardIndex, in: direction)
+            ?? direction
     }
     
     func card(cardWasReset card: DraggableCardView) {
@@ -354,10 +371,10 @@ open class KolodaView: UIView, DraggableCardDelegate {
     }
     
     // MARK: Actions
-    private func swipedAction(_ direction: SwipeResultDirection) {
+    private func swipedAction(_ direction: KolodaDirectionType) {
         animating = true
         visibleCards.removeFirst()
-        
+
         currentCardIndex += 1
         let shownCardsCount = currentCardIndex + countOfVisibleCards
         if shownCardsCount - 1 < countOfCards {
@@ -369,13 +386,14 @@ open class KolodaView: UIView, DraggableCardDelegate {
                 guard let _self = self else {
                     return
                 }
-                
+
                 _self.visibleCards.last?.isHidden = false
                 _self.animating = false
                 _self.delegate?.koloda(_self, didSwipeCardAt: _self.currentCardIndex - 1, in: direction)
                 _self.delegate?.koloda(_self, didShowCardAt: _self.currentCardIndex)
             }
         } else {
+
             animating = false
             delegate?.koloda(self, didSwipeCardAt: self.currentCardIndex - 1, in: direction)
             delegate?.kolodaDidRunOutOfCards(self)
@@ -549,13 +567,13 @@ open class KolodaView: UIView, DraggableCardDelegate {
         }
     }
 
-    public func swipe(_ direction: SwipeResultDirection, force: Bool = false) {
-        let shouldSwipe = delegate?.koloda(self, shouldSwipeCardAt: currentCardIndex, in: direction) ?? true
+    public func swipe(_ direction: KolodaDirectionType, force: Bool = false) {
+        let shouldSwipe = delegate?.koloda(self, shouldSwipeCardAt: currentCardIndex, in: direction.direction) ?? true
         guard force || shouldSwipe else {
             return
         }
         
-        let validDirection = delegate?.koloda(self, allowedDirectionsForIndex: currentCardIndex).contains(direction) ?? true
+        let validDirection = delegate?.koloda(self, allowedDirectionsForIndex: currentCardIndex).contains(direction.direction) ?? true
         guard validDirection else { return }
         
         if !animating {
@@ -674,18 +692,19 @@ open class KolodaView: UIView, DraggableCardDelegate {
     
     // MARK: Cards managing - Deletion
     
-    private func proceedDeletionInRange(_ range: CountableClosedRange<Int>) {
+    private func proceedDeletionInRange(_ range: CountableClosedRange<Int>, swipeDirectionTypeConverter:(SwipeResultDirection, Int) -> KolodaDirectionType = { direction, _  in return direction }) {
         let deletionIndexes = [Int](range)
         deletionIndexes.sorted { $0 > $1 }.forEach { deletionIndex in
             let visibleCardIndex = deletionIndex - currentCardIndex
             let card = visibleCards[visibleCardIndex]
             card.delegate = nil
-            card.swipe(.right)
+            let direction = SwipeResultDirection.right
+            card.swipe(swipeDirectionTypeConverter(direction, deletionIndex))
             visibleCards.remove(at: visibleCardIndex)
         }
     }
     
-    public func removeCardInIndexRange(_ indexRange: CountableRange<Int>, animated: Bool) {
+    public func removeCardInIndexRange(_ indexRange: CountableRange<Int>, animated: Bool, swipeDirectionTypeConverter:(SwipeResultDirection, Int) -> KolodaDirectionType = { direction, _  in return direction }) {
         guard let dataSource = dataSource else {
             return
         }
@@ -695,7 +714,8 @@ open class KolodaView: UIView, DraggableCardDelegate {
         countOfCards = dataSource.kolodaNumberOfCards(self)
         let visibleIndexes = [Int](indexRange).filter { $0 >= currentCardIndex && $0 < currentCardIndex + countOfVisibleCards }
         if !visibleIndexes.isEmpty {
-            proceedDeletionInRange(visibleIndexes[0]...visibleIndexes[visibleIndexes.count - 1])
+            proceedDeletionInRange(visibleIndexes[0]...visibleIndexes[visibleIndexes.count - 1],
+                                   swipeDirectionTypeConverter: swipeDirectionTypeConverter)
         }
         currentCardIndex -= Array(indexRange).filter { $0 < currentCardIndex }.count
         loadMissingCards(missingCardsCount())
