@@ -9,7 +9,7 @@
 import Foundation
 
 /**
- ActionLogなどで"ボタンか、Swipeか、何のアクション経由でスワイプされたか?"
+ "ボタンか、Swipeか、何のアクション経由でスワイプされたか?"
  を取得する為のprotocol
  このprotocolに適合した型をKolodaView#swipe(_:)に渡す.
 
