@@ -248,7 +248,8 @@ public class DraggableCardView: UIView, UIGestureRecognizerDelegate {
             let scale = max(scaleStrength, scaleMin)
     
             var transform = CATransform3DIdentity
-            transform = CATransform3DScale(transform, scale, scale, 1)
+            // Do Not Scale: satoshin21
+//            transform = CATransform3DScale(transform, scale, scale, 1)
             transform = CATransform3DRotate(transform, rotationAngle, 0, 0, 1)
             transform = CATransform3DTranslate(transform, dragDistance.x, dragDistance.y, 0)
             layer.transform = transform
